@@ -2,7 +2,7 @@
 
 A modern Nigerian prop trading firm built with Next.js 15, Tailwind CSS, Supabase, Paystack, and Flutterwave.
 
-## Features
+# Features
 
 - User Authentication
 - Dashboard

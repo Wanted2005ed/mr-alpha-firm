@@ -26,6 +26,7 @@ if mt5 is None and DATA_SOURCE == 'auto': DATA_SOURCE='yfinance'
 if DATA_SOURCE == 'yfinance': POLL=max(POLL,60.0)
 BASE=os.getenv('PUBLIC_BASE_URL','http://127.0.0.1:8000')
 EXECUTION_MODE='paper'
+PAPER_START_BALANCE=float(os.getenv('PAPER_START_BALANCE','200000'))
 lock=Lock(); engine_running=False; engine_thread=None
 app=FastAPI(title='Mr Alpha Autonomous Market Engine',version='2.1')
 app.add_middleware(CORSMiddleware,allow_origins=['*'],allow_methods=['*'],allow_headers=['*'])
@@ -36,7 +37,10 @@ def db():
     c=sqlite3.connect(DB); c.row_factory=sqlite3.Row; return c
 
 def init_db():
-    c=db(); c.executescript('''CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,email TEXT UNIQUE,password_hash TEXT,verified INTEGER DEFAULT 0,verify_token TEXT,created_at TEXT); CREATE TABLE IF NOT EXISTS trades(id INTEGER PRIMARY KEY,symbol TEXT,direction TEXT,entry REAL,sl REAL,tp REAL,score INTEGER,reasons TEXT,opened_at TEXT,closed_at TEXT,exit REAL,result_r REAL,status TEXT,estimated_window TEXT); CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY,kind TEXT,message TEXT,created_at TEXT);'''); c.commit(); c.close()
+    c=db(); c.executescript('''CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,email TEXT UNIQUE,password_hash TEXT,verified INTEGER DEFAULT 0,verify_token TEXT,created_at TEXT); CREATE TABLE IF NOT EXISTS trades(id INTEGER PRIMARY KEY,symbol TEXT,direction TEXT,entry REAL,sl REAL,tp REAL,score INTEGER,reasons TEXT,opened_at TEXT,closed_at TEXT,exit REAL,result_r REAL,status TEXT,estimated_window TEXT,risk_amount REAL); CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY,kind TEXT,message TEXT,created_at TEXT);''');
+    try: c.execute('ALTER TABLE trades ADD COLUMN risk_amount REAL')
+    except sqlite3.OperationalError: pass
+    c.commit(); c.close()
 
 def hashpw(p): return hashlib.sha256(p.encode()).hexdigest()
 def send_mail(to,subject,body):
@@ -100,12 +104,33 @@ def analyze(symbol):
     sl=price-atr*1.2 if direction=='BUY' else price+atr*1.2; tp=price+atr*2.4 if direction=='BUY' else price-atr*2.4
     return {'symbol':symbol,'direction':direction if score>=MIN_SCORE else 'WAIT','price':price,'sl':sl,'tp':tp,'score':score,'reasons':reasons,'atr':float(atr),'estimated_window':'15-60 min','rsi':float(rv),'ema20':float(ema20.iloc[-1]),'ema50':float(ema50.iloc[-1]),'ema200':float(ema200.iloc[-1]),'timestamp':datetime.now(timezone.utc).isoformat()}
 
+def account_snapshot():
+    c=db(); rows=c.execute("SELECT * FROM trades ORDER BY id ASC").fetchall(); c.close()
+    balance=PAPER_START_BALANCE
+    realized=0.0
+    unrealized=0.0
+    open_count=0
+    for t in rows:
+        risk=float(t['risk_amount'] or (PAPER_START_BALANCE*RISK_PER_TRADE_PCT/100.0))
+        if t['status']=='CLOSED':
+            realized += float(t['result_r'] or 0.0)*risk
+        else:
+            open_count += 1
+            px=latest_price(t['symbol'])
+            if px is not None:
+                risk_per_unit=abs(float(t['entry'])-float(t['sl']))
+                if risk_per_unit>0:
+                    r=((px-float(t['entry']))/risk_per_unit) if t['direction']=='BUY' else ((float(t['entry'])-px)/risk_per_unit)
+                    unrealized += r*risk
+    balance += realized
+    return {'currency':'USD','starting_balance':PAPER_START_BALANCE,'balance':balance,'equity':balance+unrealized,'realized_pnl':realized,'unrealized_pnl':unrealized,'total_pnl':realized+unrealized,'open_trades':open_count,'risk_per_trade_pct':RISK_PER_TRADE_PCT}
+
 def open_trade(a):
     if a['direction']=='WAIT': return
     with lock:
         c=db(); n=c.execute("SELECT COUNT(*) n FROM trades WHERE status='OPEN'").fetchone()['n']; exists=c.execute("SELECT 1 FROM trades WHERE symbol=? AND status='OPEN'",(a['symbol'],)).fetchone();
         if n>=MAX_OPEN or exists: c.close(); return
-        reasons='; '.join(a['reasons']); now=datetime.now(timezone.utc).isoformat(); c.execute('INSERT INTO trades(symbol,direction,entry,sl,tp,score,reasons,opened_at,status,estimated_window,result_r) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(a['symbol'],a['direction'],a['price'],a['sl'],a['tp'],a['score'],reasons,now,'OPEN',a['estimated_window'],0)); c.commit(); c.close()
+        reasons='; '.join(a['reasons']); now=datetime.now(timezone.utc).isoformat(); risk_amount=PAPER_START_BALANCE*RISK_PER_TRADE_PCT/100.0; c.execute('INSERT INTO trades(symbol,direction,entry,sl,tp,score,reasons,opened_at,status,estimated_window,result_r,risk_amount) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',(a['symbol'],a['direction'],a['price'],a['sl'],a['tp'],a['score'],reasons,now,'OPEN',a['estimated_window'],0,risk_amount)); c.commit(); c.close()
     msg=f"MR ALPHA BOT - PAPER TRADE OPENED\\n{a['symbol']} {a['direction']}\\nEntry: {a['price']:.5f}\\nSL: {a['sl']:.5f}\\nTP: {a['tp']:.5f}\\nSignal strength: {a['score']}/100\\nEstimated window: {a['estimated_window']}\\nWhy: {reasons}\\nExecution mode: PAPER"
     log('TRADE_OPEN',msg); email=os.getenv('ALERT_EMAIL')
     if email:
@@ -194,6 +219,10 @@ def market():
     try: return {'timestamp':datetime.now(timezone.utc).isoformat(),'data':[a for s in SYMBOLS if (a:=analyze(s))]}
     finally:
         if mt5 is not None and DATA_SOURCE != 'yfinance': mt5.shutdown()
+@app.get('/api/account')
+def account():
+    return account_snapshot()
+
 @app.get('/api/trades')
 def trades():
     c=db(); rows=[dict(x) for x in c.execute('SELECT * FROM trades ORDER BY id DESC LIMIT 100').fetchall()]; c.close(); return rows

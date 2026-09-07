@@ -1,16 +1,19 @@
-# XAUUSD Sniper Risk Control Console
+# Mr Alpha Firm Autonomous Market Engine
 
-A polished GitHub Pages frontend for the trading-risk rules defined for this project.
+A live-market, continuously scanning trading research system connected to MetaTrader 5.
 
-## Rules
-- Maximum account drawdown: 2%
-- Profit target: 10% of starting balance
-- Maximum scalping trades: 3
-- A trade is a scalp when its duration is under 2 minutes.
-- A trade is recorded as a DD event when floating/unrealized P&L becomes negative at any point before the trade closes, even if it later closes in profit.
+## Current build
+- Multi-symbol live MT5 market scanner
+- EMA 20/50/200, RSI, MACD, ATR
+- Candle pattern and market-structure confirmation
+- 0-100 signal strength ranking
+- Automatic paper-trade entry and management
+- SL/TP and R-multiple journal
+- Email trade-open and trade-close alerts
+- Email verification/login flow
+- Latency-aware timestamps
+- GitHub Pages dashboard
 
-## Safety
-The hosted page is a demo/paper-mode interface. It does not place live trades or request broker passwords. A real backend/MT5 bridge should be deployed separately with secrets stored as environment variables.
+**Execution mode is PAPER in this build. No live broker order endpoint is included.**
 
-## GitHub Pages
-The site is a single static `index.html`, so it can be served directly by GitHub Pages.
+Backend setup is documented in `backend/README.md`.

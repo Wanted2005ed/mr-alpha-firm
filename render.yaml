@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: mr-alpha-paper-engine
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements-cloud.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATA_MODE
+        value: demo
+      - key: POLL_SECONDS
+        value: "2"
+      - key: MIN_SIGNAL_SCORE
+        value: "80"
+      - key: MAX_OPEN_PAPER_TRADES
+        value: "3"

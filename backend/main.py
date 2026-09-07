@@ -27,6 +27,8 @@ if DATA_SOURCE == 'yfinance': POLL=max(POLL,60.0)
 BASE=os.getenv('PUBLIC_BASE_URL','http://127.0.0.1:8000')
 EXECUTION_MODE='paper'
 PAPER_START_BALANCE=float(os.getenv('PAPER_START_BALANCE','200000'))
+if not math.isfinite(PAPER_START_BALANCE) or PAPER_START_BALANCE <= 0: PAPER_START_BALANCE=200000.0
+if not math.isfinite(RISK_PER_TRADE): RISK_PER_TRADE=0.5
 lock=Lock(); engine_running=False; engine_thread=None
 app=FastAPI(title='Mr Alpha Autonomous Market Engine',version='2.1')
 app.add_middleware(CORSMiddleware,allow_origins=['*'],allow_methods=['*'],allow_headers=['*'])

@@ -27,8 +27,6 @@ if DATA_SOURCE == 'yfinance': POLL=max(POLL,60.0)
 BASE=os.getenv('PUBLIC_BASE_URL','http://127.0.0.1:8000')
 EXECUTION_MODE='paper'
 PAPER_START_BALANCE=float(os.getenv('PAPER_START_BALANCE','200000'))
-if not math.isfinite(PAPER_START_BALANCE) or PAPER_START_BALANCE <= 0: PAPER_START_BALANCE=200000.0
-if not math.isfinite(RISK_PER_TRADE): RISK_PER_TRADE=0.5
 lock=Lock(); engine_running=False; engine_thread=None
 app=FastAPI(title='Mr Alpha Autonomous Market Engine',version='2.1')
 app.add_middleware(CORSMiddleware,allow_origins=['*'],allow_methods=['*'],allow_headers=['*'])
@@ -219,7 +217,10 @@ def market():
         if mt5 is not None and DATA_SOURCE != 'yfinance': mt5.shutdown()
 @app.get('/api/account')
 def account():
-    return account_snapshot()
+    try:
+        return account_snapshot()
+    except Exception as e:
+        return {'currency':'USD','starting_balance':float(PAPER_START_BALANCE) if math.isfinite(PAPER_START_BALANCE) else 200000.0,'balance':float(PAPER_START_BALANCE) if math.isfinite(PAPER_START_BALANCE) else 200000.0,'equity':float(PAPER_START_BALANCE) if math.isfinite(PAPER_START_BALANCE) else 200000.0,'realized_pnl':0.0,'unrealized_pnl':0.0,'total_pnl':0.0,'open_trades':0,'risk_per_trade_pct':RISK_PER_TRADE_PCT,'error':repr(e)}
 
 @app.get('/api/trades')
 def trades():

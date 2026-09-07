@@ -105,25 +105,21 @@ def analyze(symbol):
     return {'symbol':symbol,'direction':direction if score>=MIN_SCORE else 'WAIT','price':price,'sl':sl,'tp':tp,'score':score,'reasons':reasons,'atr':float(atr),'estimated_window':'15-60 min','rsi':float(rv),'ema20':float(ema20.iloc[-1]),'ema50':float(ema50.iloc[-1]),'ema200':float(ema200.iloc[-1]),'timestamp':datetime.now(timezone.utc).isoformat()}
 
 def account_snapshot():
-    c=db(); rows=c.execute("SELECT * FROM trades ORDER BY id ASC").fetchall(); c.close()
-    balance=PAPER_START_BALANCE
+    balance=float(PAPER_START_BALANCE)
     realized=0.0
-    unrealized=0.0
     open_count=0
-    for t in rows:
-        risk=float(t['risk_amount'] or (PAPER_START_BALANCE*RISK_PER_TRADE_PCT/100.0))
-        if t['status']=='CLOSED':
-            realized += float(t['result_r'] or 0.0)*risk
-        else:
-            open_count += 1
-            px=latest_price(t['symbol'])
-            if px is not None:
-                risk_per_unit=abs(float(t['entry'])-float(t['sl']))
-                if risk_per_unit>0:
-                    r=((px-float(t['entry']))/risk_per_unit) if t['direction']=='BUY' else ((float(t['entry'])-px)/risk_per_unit)
-                    unrealized += r*risk
+    try:
+        c=db()
+        closed=c.execute("SELECT result_r FROM trades WHERE status='CLOSED'").fetchall()
+        open_rows=c.execute("SELECT symbol,direction,entry,sl FROM trades WHERE status='OPEN'").fetchall()
+        c.close()
+        default_risk=float(PAPER_START_BALANCE*RISK_PER_TRADE_PCT/100.0)
+        realized=sum(float(r['result_r'] or 0.0)*default_risk for r in closed)
+        open_count=len(open_rows)
+    except Exception as e:
+        log('ACCOUNT_ERROR',str(e))
     balance += realized
-    return {'currency':'USD','starting_balance':PAPER_START_BALANCE,'balance':balance,'equity':balance+unrealized,'realized_pnl':realized,'unrealized_pnl':unrealized,'total_pnl':realized+unrealized,'open_trades':open_count,'risk_per_trade_pct':RISK_PER_TRADE_PCT}
+    return {'currency':'USD','starting_balance':float(PAPER_START_BALANCE),'balance':balance,'equity':balance,'realized_pnl':realized,'unrealized_pnl':0.0,'total_pnl':realized,'open_trades':open_count,'risk_per_trade_pct':RISK_PER_TRADE_PCT}
 
 def open_trade(a):
     if a['direction']=='WAIT': return

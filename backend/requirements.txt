@@ -1,3 +1,6 @@
-fastapi>=0.115
-uvicorn[standard]>=0.30
-pydantic>=2.0
+fastapi
+uvicorn[standard]
+MetaTrader5
+numpy
+pandas
+python-dotenv

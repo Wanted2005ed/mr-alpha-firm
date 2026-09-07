@@ -4,7 +4,11 @@ from email.message import EmailMessage
 from threading import Lock, Thread
 import numpy as np
 import pandas as pd
-import MetaTrader5 as mt5
+try:
+    import MetaTrader5 as mt5
+except ImportError:
+    mt5 = None
+import yfinance as yf
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
@@ -16,7 +20,10 @@ SYMBOLS=[s.strip() for s in os.getenv('MT5_SYMBOLS','XAUUSD,EURUSD,GBPUSD,USDJPY
 MIN_SCORE=int(os.getenv('MIN_SIGNAL_SCORE','80'))
 RISK_PER_TRADE=float(os.getenv('RISK_PER_TRADE_PCT','0.5'))
 MAX_OPEN=int(os.getenv('MAX_OPEN_PAPER_TRADES','3'))
-POLL=max(0.2,float(os.getenv('POLL_SECONDS','1')))
+POLL=max(1.0,float(os.getenv('POLL_SECONDS','1')))
+DATA_SOURCE=os.getenv('DATA_SOURCE','auto').lower()
+if mt5 is None and DATA_SOURCE == 'auto': DATA_SOURCE='yfinance'
+if DATA_SOURCE == 'yfinance': POLL=max(POLL,60.0)
 BASE=os.getenv('PUBLIC_BASE_URL','http://127.0.0.1:8000')
 EXECUTION_MODE='paper'
 lock=Lock(); engine_running=False; engine_thread=None
@@ -43,18 +50,39 @@ def log(kind,msg):
     c=db(); c.execute('INSERT INTO events(kind,message,created_at) VALUES(?,?,?)',(kind,msg,datetime.now(timezone.utc).isoformat())); c.commit(); c.close()
 
 def connect():
+    if DATA_SOURCE == 'yfinance': return True
+    if mt5 is None: raise RuntimeError('MetaTrader5 is unavailable; set DATA_SOURCE=yfinance for cloud mode')
     login=os.getenv('MT5_LOGIN'); password=os.getenv('MT5_PASSWORD'); server=os.getenv('MT5_SERVER')
     ok=mt5.initialize(login=int(login),password=password,server=server) if login and password and server else mt5.initialize()
     if not ok: raise RuntimeError(str(mt5.last_error()))
     for s in SYMBOLS: mt5.symbol_select(s,True)
+    return True
+
+def yf_symbol(symbol):
+    return {'XAUUSD':'GC=F','EURUSD':'EURUSD=X','GBPUSD':'GBPUSD=X','USDJPY':'JPY=X','AUDUSD':'AUDUSD=X','USDCHF':'CHF=X','USDCAD':'CAD=X','NZDUSD':'NZDUSD=X'}.get(symbol, symbol+'=X')
+
+def market_frame(symbol):
+    if DATA_SOURCE != 'yfinance':
+        rates=mt5.copy_rates_from_pos(symbol,mt5.TIMEFRAME_M15,0,250)
+        return pd.DataFrame(rates) if rates is not None else pd.DataFrame()
+    df=yf.download(yf_symbol(symbol),period='5d',interval='15m',auto_adjust=False,progress=False,threads=False)
+    if df is None or df.empty: return pd.DataFrame()
+    if isinstance(df.columns,pd.MultiIndex): df.columns=df.columns.get_level_values(0)
+    df=df.rename(columns=str.lower).reset_index()
+    return df[['open','high','low','close','volume']].dropna().tail(250)
+
+def latest_price(symbol):
+    if DATA_SOURCE != 'yfinance':
+        tick=mt5.symbol_info_tick(symbol); return None if tick is None else float((tick.ask+tick.bid)/2)
+    df=market_frame(symbol); return None if df.empty else float(df.close.iloc[-1])
 
 def rsi(s,n=14):
     d=s.diff(); up=d.clip(lower=0).ewm(alpha=1/n,adjust=False).mean(); down=(-d.clip(upper=0)).ewm(alpha=1/n,adjust=False).mean(); rs=up/down.replace(0,np.nan); return 100-(100/(1+rs))
 
 def analyze(symbol):
-    rates=mt5.copy_rates_from_pos(symbol,mt5.TIMEFRAME_M15,0,250)
-    if rates is None or len(rates)<80: return None
-    df=pd.DataFrame(rates); close=df.close; high=df.high; low=df.low
+    df=market_frame(symbol)
+    if len(df)<80: return None
+    close=df.close; high=df.high; low=df.low
     ema20=close.ewm(span=20,adjust=False).mean(); ema50=close.ewm(span=50,adjust=False).mean(); ema200=close.ewm(span=200,adjust=False).mean(); rv=rsi(close).iloc[-1]
     m12=close.ewm(span=12,adjust=False).mean(); m26=close.ewm(span=26,adjust=False).mean(); macd=m12-m26; sig=macd.ewm(span=9,adjust=False).mean()
     tr=pd.concat([high-low,(high-close.shift()).abs(),(low-close.shift()).abs()],axis=1).max(axis=1); atr=tr.rolling(14).mean().iloc[-1]
@@ -77,9 +105,9 @@ def analyze(symbol):
     recent_high=high.iloc[-21:-2].max(); recent_low=low.iloc[-21:-2].min()
     if direction=='BUY' and close.iloc[-1]>recent_high: score+=10; reasons.append('M15 structure breakout')
     elif direction=='SELL' and close.iloc[-1]<recent_low: score+=10; reasons.append('M15 structure breakdown')
-    score=max(0,min(100,int(score))); tick=mt5.symbol_info_tick(symbol)
-    if tick is None or not math.isfinite(atr) or atr<=0: return None
-    price=float(tick.ask if direction=='BUY' else tick.bid); sl=price-atr*1.2 if direction=='BUY' else price+atr*1.2; tp=price+atr*2.4 if direction=='BUY' else price-atr*2.4
+    score=max(0,min(100,int(score))); price=latest_price(symbol)
+    if price is None or not math.isfinite(atr) or atr<=0: return None
+    sl=price-atr*1.2 if direction=='BUY' else price+atr*1.2; tp=price+atr*2.4 if direction=='BUY' else price-atr*2.4
     return {'symbol':symbol,'direction':direction if score>=MIN_SCORE else 'WAIT','price':price,'sl':sl,'tp':tp,'score':score,'reasons':reasons,'atr':float(atr),'estimated_window':'15-60 min','rsi':float(rv),'ema20':float(ema20.iloc[-1]),'ema50':float(ema50.iloc[-1]),'ema200':float(ema200.iloc[-1]),'timestamp':datetime.now(timezone.utc).isoformat()}
 
 def open_trade(a):
@@ -97,9 +125,9 @@ def open_trade(a):
 def manage_trades():
     c=db(); rows=c.execute("SELECT * FROM trades WHERE status='OPEN'").fetchall(); c.close()
     for t in rows:
-        tick=mt5.symbol_info_tick(t['symbol']);
-        if not tick: continue
-        px=float(tick.bid if t['direction']=='BUY' else tick.ask); reason=None
+        px=latest_price(t['symbol'])
+        if px is None: continue
+        reason=None
         if t['direction']=='BUY' and px>=t['tp']: reason='TAKE_PROFIT'
         elif t['direction']=='BUY' and px<=t['sl']: reason='STOP_LOSS'
         elif t['direction']=='SELL' and px<=t['tp']: reason='TAKE_PROFIT'
@@ -127,7 +155,8 @@ def engine():
             time.sleep(POLL)
     except Exception as e: log('ENGINE_ERROR',str(e))
     finally:
-        mt5.shutdown(); engine_running=False; log('ENGINE','Engine stopped')
+        if mt5 is not None and DATA_SOURCE != 'yfinance': mt5.shutdown()
+        engine_running=False; log('ENGINE','Engine stopped')
 
 @app.on_event('startup')
 def startup(): init_db()
@@ -167,7 +196,8 @@ def stop():
 def market():
     connect()
     try: return {'timestamp':datetime.now(timezone.utc).isoformat(),'data':[a for s in SYMBOLS if (a:=analyze(s))]}
-    finally: mt5.shutdown()
+    finally:
+        if mt5 is not None and DATA_SOURCE != 'yfinance': mt5.shutdown()
 @app.get('/api/trades')
 def trades():
     c=db(); rows=[dict(x) for x in c.execute('SELECT * FROM trades ORDER BY id DESC LIMIT 100').fetchall()]; c.close(); return rows

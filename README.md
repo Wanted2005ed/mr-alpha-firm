@@ -1,29 +1,25 @@
-# DropFlow AI
+# TechFlow
 
-**Opportunity-first dropshipping operating system.**
+TechFlow is the first storefront vertical for the DropFlow AI-native dropshipping ecosystem.
 
-DropFlow AI is the next product direction for Mr Alpha Firm: a commerce platform centered on opportunity discovery, unit economics and guided launch execution rather than another generic storefront dashboard.
+## Launch niche
+Practical phone + creator-desk tech accessories.
 
-## Current MVP
-- Premium responsive landing/dashboard shell
-- Opportunity Radar with product scoring and filters
-- Opportunity metrics: demand, competition, margin and momentum
-- Launch economics calculator
-- Architecture for Signal Miner, Margin Brain, Launch Composer and Autopilot Loop
-- No secrets or payment credentials committed to the repository
+## Initial products
+- Magnetic Creator Phone Mount
+- 45W Magnetic Charging Kit
+- 6-in-1 USB-C Desk Hub
+- Smart Cable Organizer Set
 
-## Product roadmap
-1. Live opportunity data ingestion via Composio Search
-2. Supplier intelligence and landed-cost normalization
-3. AI product-page and ad generation
-4. Shopify catalog/order automation via Composio
-5. Merchant onboarding and authentication
-6. Payment integration and order ledger
-7. Analytics, experiments and alerts
-8. Production deployment, monitoring and security hardening
+Prototype prices are placeholders until supplier cost, shipping, fees and returns are validated.
 
-## Revenue goal
-The commercial target is **$10,000 in revenue by September 30, 2026**. This is an aggressive business target, not a guaranteed outcome. The fastest route is to validate a narrow offer and acquire paying merchants before spending weeks on nonessential features.
+## Next build layers
+1. Opportunity Radar scoring engine
+2. Shopify product/order synchronization
+3. Supplier and landed-cost validation
+4. Analytics and conversion tracking
+5. AI product copy and ad creative generation
+6. Fulfillment and customer-support automation
 
-## Development rule
-Keep API keys, payment secrets and private credentials outside Git. Use environment variables and a secrets manager in deployment.
+## Important
+Trend signals indicate opportunity, not guaranteed sales. The business target is a revenue goal, not a promise.

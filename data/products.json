@@ -1,0 +1,26 @@
+{
+  "vertical": "practical phone + creator-desk tech accessories",
+  "updated": "2026-09-07",
+  "signal": {
+    "name": "phone accessories",
+    "relative_interest_7d": 63,
+    "interpretation": "demand signal, not a sales guarantee"
+  },
+  "scoring": {
+    "weights": {
+      "demand": 0.25,
+      "margin": 0.20,
+      "competition": 0.15,
+      "shipping": 0.10,
+      "demo": 0.15,
+      "bundle": 0.15
+    },
+    "competition": "higher score means less competitive pressure"
+  },
+  "products": [
+    {"id":"tf-001","name":"Magnetic Creator Phone Mount","target_price":29.99,"scores":{"demand":63,"margin":88,"competition":72,"shipping":92,"demo":96,"bundle":90}},
+    {"id":"tf-002","name":"45W Magnetic Charging Kit","target_price":34.99,"scores":{"demand":63,"margin":84,"competition":70,"shipping":86,"demo":91,"bundle":94}},
+    {"id":"tf-003","name":"6-in-1 USB-C Desk Hub","target_price":39.99,"scores":{"demand":63,"margin":82,"competition":66,"shipping":78,"demo":88,"bundle":92}},
+    {"id":"tf-004","name":"Smart Cable Organizer Set","target_price":16.99,"scores":{"demand":63,"margin":90,"competition":76,"shipping":98,"demo":84,"bundle":96}}
+  ]
+}

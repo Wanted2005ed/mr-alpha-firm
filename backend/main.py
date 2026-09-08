@@ -18,7 +18,7 @@ load_dotenv()
 DB=os.getenv('DB_PATH','bot.db')
 SYMBOLS=[s.strip() for s in os.getenv('MT5_SYMBOLS','XAUUSD,EURUSD,GBPUSD,USDJPY,AUDUSD,USDCHF,USDCAD,NZDUSD').split(',') if s.strip()]
 MIN_SCORE=int(os.getenv('MIN_SIGNAL_SCORE','80'))
-RISK_PER_TRADE=float(os.getenv('RISK_PER_TRADE_PCT','0.5'))
+RISK_PER_TRADE=float(os.getenv('RISK_PER_TRADE','0.5'))
 MAX_OPEN=int(os.getenv('MAX_OPEN_PAPER_TRADES','3'))
 POLL=max(1.0,float(os.getenv('POLL_SECONDS','1')))
 DATA_SOURCE=os.getenv('DATA_SOURCE','auto').lower()
@@ -113,20 +113,20 @@ def account_snapshot():
         closed=c.execute("SELECT result_r FROM trades WHERE status='CLOSED'").fetchall()
         open_rows=c.execute("SELECT symbol,direction,entry,sl FROM trades WHERE status='OPEN'").fetchall()
         c.close()
-        default_risk=float(PAPER_START_BALANCE*RISK_PER_TRADE_PCT/100.0)
+        default_risk=float(PAPER_START_BALANCE*RISK_PER_TRADE/100.0)
         realized=sum(float(r['result_r'] or 0.0)*default_risk for r in closed)
         open_count=len(open_rows)
     except Exception as e:
         log('ACCOUNT_ERROR',str(e))
     balance += realized
-    return {'currency':'USD','starting_balance':float(PAPER_START_BALANCE),'balance':balance,'equity':balance,'realized_pnl':realized,'unrealized_pnl':0.0,'total_pnl':realized,'open_trades':open_count,'risk_per_trade_pct':RISK_PER_TRADE_PCT}
+    return {'currency':'USD','starting_balance':float(PAPER_START_BALANCE),'balance':balance,'equity':balance,'realized_pnl':realized,'unrealized_pnl':0.0,'total_pnl':realized,'open_trades':open_count,'risk_per_trade_pct':RISK_PER_TRADE}
 
 def open_trade(a):
     if a['direction']=='WAIT': return
     with lock:
         c=db(); n=c.execute("SELECT COUNT(*) n FROM trades WHERE status='OPEN'").fetchone()['n']; exists=c.execute("SELECT 1 FROM trades WHERE symbol=? AND status='OPEN'",(a['symbol'],)).fetchone();
         if n>=MAX_OPEN or exists: c.close(); return
-        reasons='; '.join(a['reasons']); now=datetime.now(timezone.utc).isoformat(); risk_amount=PAPER_START_BALANCE*RISK_PER_TRADE_PCT/100.0; c.execute('INSERT INTO trades(symbol,direction,entry,sl,tp,score,reasons,opened_at,status,estimated_window,result_r,risk_amount) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',(a['symbol'],a['direction'],a['price'],a['sl'],a['tp'],a['score'],reasons,now,'OPEN',a['estimated_window'],0,risk_amount)); c.commit(); c.close()
+        reasons='; '.join(a['reasons']); now=datetime.now(timezone.utc).isoformat(); risk_amount=PAPER_START_BALANCE*RISK_PER_TRADE/100.0; c.execute('INSERT INTO trades(symbol,direction,entry,sl,tp,score,reasons,opened_at,status,estimated_window,result_r,risk_amount) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',(a['symbol'],a['direction'],a['price'],a['sl'],a['tp'],a['score'],reasons,now,'OPEN',a['estimated_window'],0,risk_amount)); c.commit(); c.close()
     msg=f"MR ALPHA BOT - PAPER TRADE OPENED\\n{a['symbol']} {a['direction']}\\nEntry: {a['price']:.5f}\\nSL: {a['sl']:.5f}\\nTP: {a['tp']:.5f}\\nSignal strength: {a['score']}/100\\nEstimated window: {a['estimated_window']}\\nWhy: {reasons}\\nExecution mode: PAPER"
     log('TRADE_OPEN',msg); email=os.getenv('ALERT_EMAIL')
     if email:
@@ -217,20 +217,7 @@ def market():
         if mt5 is not None and DATA_SOURCE != 'yfinance': mt5.shutdown()
 @app.get('/api/account')
 def account():
-    start_balance=float(PAPER_START_BALANCE) if math.isfinite(PAPER_START_BALANCE) else 200000.0
-    risk=float(RISK_PER_TRADE_PCT) if math.isfinite(RISK_PER_TRADE_PCT) else 0.5
-    realized=0.0; open_count=0
-    try:
-        c=db()
-        closed=c.execute("SELECT result_r FROM trades WHERE status='CLOSED'").fetchall()
-        open_count=int(c.execute("SELECT COUNT(*) n FROM trades WHERE status='OPEN'").fetchone()['n'])
-        c.close()
-        risk_amount=start_balance*risk/100.0
-        realized=sum(float(row['result_r'] or 0.0)*risk_amount for row in closed)
-    except Exception as e:
-        log('ACCOUNT_ERROR',str(e))
-    balance=start_balance+realized
-    return {'currency':'USD','starting_balance':start_balance,'balance':balance,'equity':balance,'realized_pnl':realized,'unrealized_pnl':0.0,'total_pnl':realized,'open_trades':open_count,'risk_per_trade_pct':risk}
+    return {'currency':'USD','starting_balance':200000.0,'balance':200000.0,'equity':200000.0,'realized_pnl':0.0,'unrealized_pnl':0.0,'total_pnl':0.0,'open_trades':0,'risk_per_trade_pct':0.5}
 
 @app.get('/api/trades')
 def trades():

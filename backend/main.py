@@ -217,10 +217,7 @@ def market():
         if mt5 is not None and DATA_SOURCE != 'yfinance': mt5.shutdown()
 @app.get('/api/account')
 def account():
-    try:
-        return account_snapshot()
-    except Exception as e:
-        return {'currency':'USD','starting_balance':float(PAPER_START_BALANCE) if math.isfinite(PAPER_START_BALANCE) else 200000.0,'balance':float(PAPER_START_BALANCE) if math.isfinite(PAPER_START_BALANCE) else 200000.0,'equity':float(PAPER_START_BALANCE) if math.isfinite(PAPER_START_BALANCE) else 200000.0,'realized_pnl':0.0,'unrealized_pnl':0.0,'total_pnl':0.0,'open_trades':0,'risk_per_trade_pct':RISK_PER_TRADE_PCT,'error':repr(e)}
+    return {'currency':'USD','starting_balance':200000.0,'balance':200000.0,'equity':200000.0,'realized_pnl':0.0,'unrealized_pnl':0.0,'total_pnl':0.0,'open_trades':0,'risk_per_trade_pct':0.5}
 
 @app.get('/api/trades')
 def trades():

@@ -217,7 +217,20 @@ def market():
         if mt5 is not None and DATA_SOURCE != 'yfinance': mt5.shutdown()
 @app.get('/api/account')
 def account():
-    return {'currency':'USD','starting_balance':200000.0,'balance':200000.0,'equity':200000.0,'realized_pnl':0.0,'unrealized_pnl':0.0,'total_pnl':0.0,'open_trades':0,'risk_per_trade_pct':0.5}
+    start_balance=float(PAPER_START_BALANCE) if math.isfinite(PAPER_START_BALANCE) else 200000.0
+    risk=float(RISK_PER_TRADE_PCT) if math.isfinite(RISK_PER_TRADE_PCT) else 0.5
+    realized=0.0; open_count=0
+    try:
+        c=db()
+        closed=c.execute("SELECT result_r FROM trades WHERE status='CLOSED'").fetchall()
+        open_count=int(c.execute("SELECT COUNT(*) n FROM trades WHERE status='OPEN'").fetchone()['n'])
+        c.close()
+        risk_amount=start_balance*risk/100.0
+        realized=sum(float(row['result_r'] or 0.0)*risk_amount for row in closed)
+    except Exception as e:
+        log('ACCOUNT_ERROR',str(e))
+    balance=start_balance+realized
+    return {'currency':'USD','starting_balance':start_balance,'balance':balance,'equity':balance,'realized_pnl':realized,'unrealized_pnl':0.0,'total_pnl':realized,'open_trades':open_count,'risk_per_trade_pct':risk}
 
 @app.get('/api/trades')
 def trades():
